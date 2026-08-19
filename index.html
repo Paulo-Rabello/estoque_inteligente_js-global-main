@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estoque Inteligente 360°</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Bibliotecas para QR Code e Exportação -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+</head>
+<body>
+    <header>
+        <div class="header-title">
+            <h1>🎥 Estoque Inteligente 360°</h1>
+            <span class="badge-live">AO VIVO</span>
+        </div>
+        <button id="btnExport" class="btn-green">📊 Exportar para Excel (.csv)</button>
+    </header>
+
+    <main>
+        <!-- Geração de QR Code -->
+        <section class="card">
+            <h2>Gerador de Identificação (QR Code)</h2>
+            <div class="form-group">
+                <input type="text" id="productName" placeholder="Nome ou Código do Produto (Ex: PC-8841)">
+                <button id="btnGenerateQR" class="btn-blue">Gerar QR Code</button>
+            </div>
+            <div id="qrcode-container"></div>
+        </section>
+
+        <!-- Monitoramento Visão Computacional -->
+        <section class="card">
+            <div class="card-header">
+                <h2>Monitoramento de Visão Computacional</h2>
+                <span id="cameraStatus">Aguardando Seleção</span>
+            </div>
+
+            <!-- NOVO: Configuração de Tempo de Saída -->
+            <div class="config-bar">
+                <label for="timeoutInput">⏳ Tempo de tolerância para Saída (em minutos):</label>
+                <div class="input-group">
+                    <input type="number" id="timeoutInput" value="60" min="1" step="1">
+                    <button id="btnApplyTimeout" class="btn-green">Aplicar Tempo</button>
+                </div>
+                <small>O item registrará "Saída" se ficar este tempo contínuo sem ser visto pela câmera.</small>
+            </div>
+            
+            <div id="reader" class="camera-reader">
+                <div id="qrOverlay" class="qr-overlay" hidden>
+                    <span id="qrOverlayLabel"></span>
+                </div>
+            </div>
+            <p id="qrLocation" class="qr-location">Localização do QR: aguardando leitura</p>
+            
+            <div class="controls">
+                <button id="btnStartCamera" class="btn-blue">Ligar Câmera</button>
+                <button id="btnStopCamera" class="btn-red">Desligar</button>
+            </div>
+
+            <div class="stock-panel">
+                <div class="stock-panel-header">
+                    <h3>📦 Estoque Atual</h3>
+                    <span id="presentCount" class="badge-live">0 presentes</span>
+                </div>
+                <div class="search-box">
+                    <input type="text" id="productSearch" placeholder="Pesquisar produto por código">
+                    <button id="btnSearchProduct" class="btn-blue" type="button">Buscar</button>
+                </div>
+                <ul id="stockList" class="stock-list"></ul>
+            </div>
+
+            <div class="stock-panel">
+                <div class="stock-panel-header">
+                    <h3>🗺️ Mapa Virtual do Estoque</h3>
+                    <button id="btnExportMap" class="btn-green">Exportar CSV</button>
+                </div>
+
+                <div class="map-controls">
+                    <div class="map-control-group">
+                        <label for="cameraWidth">Resolução Largura</label>
+                        <input type="number" id="cameraWidth" value="1920" min="1">
+                    </div>
+                    <div class="map-control-group">
+                        <label for="cameraHeight">Resolução Altura</label>
+                        <input type="number" id="cameraHeight" value="1080" min="1">
+                    </div>
+                    <div class="map-control-group">
+                        <label for="cameraSelect">Câmera</label>
+                        <select id="cameraSelect">
+                            <option value="Camera 1 - Blocos A/B">Camera 1 - Blocos A/B</option>
+                            <option value="Camera 2 - Blocos C/D">Camera 2 - Blocos C/D</option>
+                        </select>
+                    </div>
+                </div>
+
+                <p id="activePlacementLabel" class="map-info">Produto ativo: Nenhum</p>
+                <div id="virtualGrid" class="virtual-grid"></div>
+
+                <div class="mobile-summary-panel">
+                    <div class="stock-panel-header">
+                        <h4>📱 Visão para celular</h4>
+                        <button id="btnToggleMobile" class="btn-blue" type="button">Alternar visualização</button>
+                    </div>
+                    <div id="mobileSummaryList" class="mobile-summary-list"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Histórico com Abas -->
+        <section class="card">
+            <h2>Histórico do Estoque</h2>
+            
+            <!-- Sistema de Abas -->
+            <div class="tabs">
+                <button class="tab-btn active" onclick="openTab('entrada')">Entradas</button>
+                <button class="tab-btn" onclick="openTab('saida')">Saídas</button>
+            </div>
+
+            <!-- Tabela de Entrada -->
+            <div id="tab-entrada" class="tab-content active">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data / Hora</th>
+                            <th>Produto</th>
+                            <th>Tipo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableEntradaBody">
+                        <!-- Linhas dinâmicas -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Tabela de Saída -->
+            <div id="tab-saida" class="tab-content">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Data / Hora</th>
+                            <th>Produto</th>
+                            <th>Tipo</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tableSaidaBody">
+                        <!-- Linhas dinâmicas -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
