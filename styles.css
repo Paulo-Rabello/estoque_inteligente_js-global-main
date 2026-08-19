@@ -298,6 +298,27 @@ body.mobile-view-active .mobile-summary-panel {
     border-color: #34d399;
 }
 
+.grid-cell.active-product {
+    background: #854d0e;
+    border: 2px solid #facc15;
+    box-shadow: 0 0 0 2px rgba(250, 204, 21, 0.28), 0 0 16px rgba(250, 204, 21, 0.45);
+    transform: scale(1.03);
+}
+
+.grid-cell strong,
+.grid-cell small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.grid-cell small {
+    margin-top: 4px;
+    color: #fde68a;
+    font-family: Consolas, monospace;
+    font-size: 0.65rem;
+}
+
 .grid-cell:hover {
     transform: scale(1.02);
 }
@@ -330,13 +351,22 @@ body.mobile-view-active .mobile-summary-panel {
     font-size: 0.85rem;
 }
 
+.camera-stage {
+    position: relative;
+    width: 100%;
+    min-height: 300px;
+    margin-bottom: 8px;
+    overflow: hidden;
+    border-radius: 8px;
+    background: #000;
+}
+
 .camera-reader {
     position: relative;
     width: 100%;
     min-height: 300px;
     background: #000;
     border-radius: 8px;
-    margin-bottom: 8px;
     overflow: hidden;
 }
 
@@ -344,6 +374,15 @@ body.mobile-view-active .mobile-summary-panel {
     display: block;
     width: 100% !important;
     height: auto !important;
+}
+
+#mappingCanvas {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
 }
 
 .qr-overlay {
@@ -372,4 +411,54 @@ body.mobile-view-active .mobile-summary-panel {
     color: #86efac;
     font-family: Consolas, monospace;
     font-size: 0.9rem;
+}
+
+.mapping-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 9px;
+    margin-bottom: 12px;
+    color: #cbd5e1;
+    cursor: pointer;
+    user-select: none;
+}
+
+.mapping-switch input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.switch-slider {
+    position: relative;
+    width: 42px;
+    height: 24px;
+    border-radius: 12px;
+    background: #475569;
+    transition: background 0.2s;
+}
+
+.switch-slider::after {
+    content: '';
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #f8fafc;
+    transition: transform 0.2s;
+}
+
+.mapping-switch input:checked + .switch-slider {
+    background: #16a34a;
+}
+
+.mapping-switch input:checked + .switch-slider::after {
+    transform: translateX(18px);
+}
+
+.mapping-switch input:focus-visible + .switch-slider {
+    outline: 2px solid #38bdf8;
+    outline-offset: 2px;
 }

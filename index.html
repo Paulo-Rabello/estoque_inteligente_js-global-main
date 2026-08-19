@@ -8,6 +8,7 @@
     <!-- Bibliotecas para QR Code e Exportação -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 </head>
 <body>
     <header>
@@ -46,12 +47,19 @@
                 <small>O item registrará "Saída" se ficar este tempo contínuo sem ser visto pela câmera.</small>
             </div>
             
-            <div id="reader" class="camera-reader">
+            <div class="camera-stage">
+                <div id="reader" class="camera-reader"></div>
+                <canvas id="mappingCanvas" hidden></canvas>
                 <div id="qrOverlay" class="qr-overlay" hidden>
                     <span id="qrOverlayLabel"></span>
                 </div>
             </div>
             <p id="qrLocation" class="qr-location">Localização do QR: aguardando leitura</p>
+            <label class="mapping-switch">
+                <input type="checkbox" id="mappingToggle" checked>
+                <span class="switch-slider"></span>
+                <span>Exibir mapeamento X/Y</span>
+            </label>
             
             <div class="controls">
                 <button id="btnStartCamera" class="btn-blue">Ligar Câmera</button>
@@ -75,6 +83,7 @@
                     <h3>🗺️ Mapa Virtual do Estoque</h3>
                     <button id="btnExportMap" class="btn-green">Exportar CSV</button>
                 </div>
+                <p id="gridMappingStatus" class="map-info">Aguardando coordenadas do QR</p>
 
                 <div class="map-controls">
                     <div class="map-control-group">

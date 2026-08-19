@@ -39,6 +39,15 @@ const inventoryPositions = {};
 const qrOverlay = document.getElementById('qrOverlay');
 const qrOverlayLabel = document.getElementById('qrOverlayLabel');
 const qrLocation = document.getElementById('qrLocation');
+const gridMappingStatus = document.getElementById('gridMappingStatus');
+const mappingToggle = document.getElementById('mappingToggle');
+const mappingCanvas = document.getElementById('mappingCanvas');
+const mappingContext = mappingCanvas.getContext('2d');
+const mappingTrail = [];
+const scanCanvas = document.createElement('canvas');
+const scanContext = scanCanvas.getContext('2d', { willReadFrequently: true });
+let jsQrAnimationFrame = null;
+let lastJsQrReadAt = 0;
 
 // Atualiza o tempo de tolerância quando o usuário clica em Aplicar
 document.getElementById('btnApplyTimeout').addEventListener('click', () => {
@@ -104,12 +113,40 @@ function updateActivePlacementLabel() {
 }
 
 function getResultPoints(decodedResult) {
-    return decodedResult?.result?.resultPoints || decodedResult?.resultPoints || [];
+    const location = decodedResult?.location;
+    if (location) {
+        return [
+            location.topLeftCorner,
+            location.topRightCorner,
+            location.bottomRightCorner,
+            location.bottomLeftCorner
+        ].filter(Boolean);
+    }
+
+    const points = decodedResult?.result?.resultPoints
+        || decodedResult?.resultPoints
+        || decodedResult?.result?.cornerPoints
+        || decodedResult?.cornerPoints
+        || decodedResult?.points;
+
+    return Array.isArray(points) ? points : [];
+}
+
+function getPointCoordinate(point, coordinate) {
+    if (Number.isFinite(Number(point?.[coordinate]))) {
+        return Number(point[coordinate]);
+    }
+
+    const getter = point?.[`get${coordinate.toUpperCase()}`];
+    return typeof getter === 'function' ? Number(getter.call(point)) : NaN;
 }
 
 function getQrLocation(decodedResult) {
     const points = getResultPoints(decodedResult)
-        .map((point) => ({ x: Number(point.x), y: Number(point.y) }))
+        .map((point) => ({
+            x: getPointCoordinate(point, 'x'),
+            y: getPointCoordinate(point, 'y')
+        }))
         .filter((point) => Number.isFinite(point.x) && Number.isFinite(point.y));
 
     if (points.length < 2) return null;
@@ -123,24 +160,102 @@ function getQrLocation(decodedResult) {
     const width = right - left;
     const height = bottom - top;
     const resolution = html5QrCode.getRunningTrackSettings?.() || {};
-    const videoWidth = resolution.width || parseInt(document.getElementById('cameraWidth').value, 10) || 1920;
-    const videoHeight = resolution.height || parseInt(document.getElementById('cameraHeight').value, 10) || 1080;
+    const video = document.querySelector('#reader video');
+    const videoWidth = video?.videoWidth || resolution.width || parseInt(document.getElementById('cameraWidth').value, 10) || 1920;
+    const videoHeight = video?.videoHeight || resolution.height || parseInt(document.getElementById('cameraHeight').value, 10) || 1080;
     const { columns, rows } = getGridConfig();
-    const centerX = left + width / 2;
-    const centerY = top + height / 2;
+    const centerX = points.reduce((sum, point) => sum + point.x, 0) / points.length;
+    const centerY = points.reduce((sum, point) => sum + point.y, 0) / points.length;
 
     return {
-        x: Math.round(centerX),
-        y: Math.round(centerY),
+        x: centerX,
+        y: centerY,
         left,
         top,
         width,
         height,
+        corners: points,
         videoWidth,
         videoHeight,
         row: Math.min(rows - 1, Math.max(0, Math.floor((centerY / videoHeight) * rows))),
         col: Math.min(columns - 1, Math.max(0, Math.floor((centerX / videoWidth) * columns)))
     };
+}
+
+function drawMapping(location) {
+    const video = document.querySelector('#reader video');
+    if (!video || !location || !mappingToggle.checked) return;
+
+    const width = location.videoWidth;
+    const height = location.videoHeight;
+    mappingCanvas.hidden = false;
+    mappingCanvas.width = width;
+    mappingCanvas.height = height;
+    mappingTrail.push({ x: location.x, y: location.y });
+    if (mappingTrail.length > 20) mappingTrail.shift();
+
+    mappingContext.clearRect(0, 0, width, height);
+    mappingContext.strokeStyle = 'rgba(125, 211, 252, 0.3)';
+    mappingContext.lineWidth = 1;
+    for (let x = 0; x <= width; x += width / 8) {
+        mappingContext.beginPath();
+        mappingContext.moveTo(x, 0);
+        mappingContext.lineTo(x, height);
+        mappingContext.stroke();
+    }
+    for (let y = 0; y <= height; y += height / 6) {
+        mappingContext.beginPath();
+        mappingContext.moveTo(0, y);
+        mappingContext.lineTo(width, y);
+        mappingContext.stroke();
+    }
+
+    mappingContext.strokeStyle = 'rgba(248, 250, 252, 0.85)';
+    mappingContext.lineWidth = 2;
+    mappingContext.beginPath();
+    mappingContext.moveTo(location.x, 0);
+    mappingContext.lineTo(location.x, height);
+    mappingContext.moveTo(0, location.y);
+    mappingContext.lineTo(width, location.y);
+    mappingContext.stroke();
+
+    if (location.corners?.length === 4) {
+        mappingContext.strokeStyle = '#22c55e';
+        mappingContext.fillStyle = 'rgba(34, 197, 94, 0.18)';
+        mappingContext.lineWidth = 5;
+        mappingContext.beginPath();
+        mappingContext.moveTo(location.corners[0].x, location.corners[0].y);
+        location.corners.slice(1).forEach((corner) => mappingContext.lineTo(corner.x, corner.y));
+        mappingContext.closePath();
+        mappingContext.fill();
+        mappingContext.stroke();
+    }
+
+    mappingTrail.forEach((point, index) => {
+        mappingContext.fillStyle = `rgba(250, 204, 21, ${0.15 + ((index + 1) / mappingTrail.length) * 0.7})`;
+        mappingContext.beginPath();
+        mappingContext.arc(point.x, point.y, index === mappingTrail.length - 1 ? 9 : 4, 0, Math.PI * 2);
+        mappingContext.fill();
+    });
+
+    mappingContext.fillStyle = '#facc15';
+    mappingContext.font = 'bold 22px Consolas, monospace';
+    mappingContext.fillText(`X: ${Math.round(location.x)}px  Y: ${Math.round(location.y)}px`, 16, 30);
+}
+
+function updateMappingVisibility() {
+    const visible = mappingToggle.checked;
+    mappingCanvas.hidden = !visible;
+    qrOverlay.hidden = !visible || qrOverlay.dataset.detected !== 'true';
+    if (visible && mappingTrail.length > 0) {
+        const lastPoint = mappingTrail[mappingTrail.length - 1];
+        drawMapping({
+            x: lastPoint.x,
+            y: lastPoint.y,
+            videoWidth: mappingCanvas.width,
+            videoHeight: mappingCanvas.height
+        });
+    }
 }
 
 function showQrLocation(location, product) {
@@ -149,16 +264,18 @@ function showQrLocation(location, product) {
         return;
     }
 
-    qrLocation.textContent = `QR: ${product} • X: ${location.x}px, Y: ${location.y}px • ${location.videoWidth}x${location.videoHeight} • L${location.row + 1} / C${location.col + 1}`;
+    qrLocation.textContent = `QR: ${product} • X: ${Math.round(location.x)}px, Y: ${Math.round(location.y)}px • ${location.videoWidth}x${location.videoHeight} • L${location.row + 1} / C${location.col + 1}`;
     const video = document.querySelector('#reader video');
     if (!video) return;
 
     qrOverlay.hidden = false;
+    qrOverlay.dataset.detected = 'true';
     qrOverlay.style.left = `${(location.left / location.videoWidth) * 100}%`;
     qrOverlay.style.top = `${(location.top / location.videoHeight) * 100}%`;
     qrOverlay.style.width = `${(location.width / location.videoWidth) * 100}%`;
     qrOverlay.style.height = `${(location.height / location.videoHeight) * 100}%`;
-    qrOverlayLabel.textContent = `${product} (${location.x}, ${location.y})`;
+    qrOverlayLabel.textContent = `${product} (${Math.round(location.x)}, ${Math.round(location.y)})`;
+    drawMapping(location);
 }
 
 function autoPlaceProduct(product, location) {
@@ -177,10 +294,51 @@ function autoPlaceProduct(product, location) {
             width: location.videoWidth,
             height: location.videoHeight
         };
+        gridMappingStatus.textContent = `Mapa atualizado: ${product} em X ${location.x.toFixed(2)}px, Y ${location.y.toFixed(2)}px • Linha ${location.row + 1}, Coluna ${location.col + 1}`;
     }
 
     renderVirtualGrid();
     renderMobileSummary();
+}
+
+function scanVideoWithJsQr() {
+    const video = document.querySelector('#reader video');
+    if (!window.jsQR) {
+        document.getElementById('cameraStatus').innerText = 'Erro: jsQR não foi carregado';
+        return;
+    }
+    if (!video || video.readyState < HTMLMediaElement.HAVE_CURRENT_DATA) {
+        jsQrAnimationFrame = requestAnimationFrame(scanVideoWithJsQr);
+        return;
+    }
+
+    const width = video.videoWidth;
+    const height = video.videoHeight;
+    if (!width || !height) {
+        jsQrAnimationFrame = requestAnimationFrame(scanVideoWithJsQr);
+        return;
+    }
+
+    scanCanvas.width = width;
+    scanCanvas.height = height;
+    scanContext.drawImage(video, 0, 0, width, height);
+    const imageData = scanContext.getImageData(0, 0, width, height);
+    const code = window.jsQR(imageData.data, width, height, { inversionAttempts: 'attemptBoth' });
+    const now = performance.now();
+
+    if (code && now - lastJsQrReadAt >= 100) {
+        lastJsQrReadAt = now;
+        qrCodeSuccessCallback(code.data, { location: code.location });
+    }
+
+    jsQrAnimationFrame = requestAnimationFrame(scanVideoWithJsQr);
+}
+
+function stopJsQrScan() {
+    if (jsQrAnimationFrame !== null) {
+        cancelAnimationFrame(jsQrAnimationFrame);
+        jsQrAnimationFrame = null;
+    }
 }
 
 function renderVirtualGrid() {
@@ -189,6 +347,7 @@ function renderVirtualGrid() {
     const camera = document.getElementById('cameraSelect').value;
 
     grid.style.gridTemplateColumns = `repeat(${columns}, minmax(60px, 1fr))`;
+    grid.style.aspectRatio = `${getGridConfig().width} / ${getGridConfig().height}`;
     grid.innerHTML = '';
 
     for (let row = 0; row < rows; row += 1) {
@@ -199,7 +358,16 @@ function renderVirtualGrid() {
 
             if (foundEntry) {
                 cell.classList.add('has-product');
-                cell.textContent = foundEntry[0];
+                const [product, positions] = foundEntry;
+                const position = positions[camera];
+                if (product === activePlacementProduct) {
+                    cell.classList.add('active-product');
+                }
+                cell.innerHTML = `<strong>${product}</strong><small>X ${position.x ?? '-'} / Y ${position.y ?? '-'}</small>`;
+                cell.title = `${product} • X: ${position.x ?? '-'}px, Y: ${position.y ?? '-'}px`;
+                if (product === activePlacementProduct) {
+                    cell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                }
             } else {
                 cell.textContent = `${row + 1}-${col + 1}`;
             }
@@ -393,8 +561,15 @@ document.getElementById('btnStartCamera').addEventListener('click', async () => 
             width: { ideal: bestResolution.width },
             height: { ideal: bestResolution.height }
         };
-        await html5QrCode.start(cameraId || { facingMode: 'environment' }, scanConfig, qrCodeSuccessCallback);
-        document.getElementById('cameraStatus').innerText = `Monitorando • resolução ${bestResolution.width}x${bestResolution.height}`;
+        await html5QrCode.start(cameraId || { facingMode: 'environment' }, scanConfig, () => {});
+        const actualResolution = html5QrCode.getRunningTrackSettings?.() || {};
+        const actualWidth = actualResolution.width || bestResolution.width;
+        const actualHeight = actualResolution.height || bestResolution.height;
+        document.getElementById('cameraWidth').value = actualWidth;
+        document.getElementById('cameraHeight').value = actualHeight;
+        renderVirtualGrid();
+        scanVideoWithJsQr();
+        document.getElementById('cameraStatus').innerText = `Monitorando • resolução ${actualWidth}x${actualHeight} • jsQR ativo`;
     } catch (err) {
         document.getElementById('cameraStatus').innerText = 'Não foi possível iniciar a câmera';
         console.error(err);
@@ -403,8 +578,13 @@ document.getElementById('btnStartCamera').addEventListener('click', async () => 
 
 document.getElementById('btnStopCamera').addEventListener('click', () => {
     html5QrCode.stop().then(() => {
+    stopJsQrScan();
         document.getElementById('cameraStatus').innerText = 'Câmera Desligada';
         qrOverlay.hidden = true;
+        qrOverlay.dataset.detected = 'false';
+        mappingCanvas.hidden = true;
+        mappingTrail.length = 0;
+        mappingContext.clearRect(0, 0, mappingCanvas.width, mappingCanvas.height);
         qrLocation.textContent = 'Localização do QR: aguardando leitura';
         itemsInView = {};
         renderStock();
@@ -460,3 +640,5 @@ document.getElementById('btnExport').addEventListener('click', () => {
     link.click();
     document.body.removeChild(link);
 });
+
+mappingToggle.addEventListener('change', updateMappingVisibility);
